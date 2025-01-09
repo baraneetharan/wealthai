@@ -13,23 +13,19 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
-// builder.Services.AddDbContext<LightContext>(opt =>
-//     opt.UseInMemoryDatabase("LightList"));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Add the chat client
+// Add the chat client as Singleton
 IChatClient innerChatClient = new ChatCompletionsClient(
     endpoint: new Uri("https://models.inference.ai.azure.com"),
     new AzureKeyCredential(githubKey))
     .AsChatClient("gpt-4o-mini");
 
-// IChatClient innerChatClient = 
-//     new OllamaChatClient(new Uri("http://localhost:11434/"), "llama3");
+builder.Services.AddSingleton<IChatClient>(provider => innerChatClient);
 
 builder.Services.AddChatClient(chatClientBuilder => chatClientBuilder
     .UseFunctionInvocation()
-    .UseLogging()
     .Use(innerChatClient));
 
 // Register embedding generator
@@ -38,36 +34,48 @@ builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp 
         new AzureKeyCredential(githubKey))
         .AsEmbeddingGenerator(modelId: "text-embedding-3-large"));
 
-// builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(provider =>
-//     new OllamaEmbeddingGenerator(new Uri("http://localhost:11434/"), "all-minilm"));
-
 builder.Services.AddLogging(loggingBuilder =>
     loggingBuilder.AddConsole().SetMinimumLevel(LogLevel.Debug));
 
-// Register WealthService with its dependency
-builder.Services.AddSingleton<WealthService>(sp =>
-    new WealthService(sp.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>()));
+// Register services
+builder.Services.AddSingleton<WealthService>();
+builder.Services.AddSingleton<WealthServiceWoLLM>();    
+builder.Services.AddSingleton<WealthServicefromDB>();
 
-var wealthService = builder.Services.BuildServiceProvider().GetRequiredService<WealthService>();
+// Register WealthAgent as scoped
+builder.Services.AddScoped<WealthAgent>();
 
-var storeVectorsTool = AIFunctionFactory.Create(wealthService.StoreVectors);
-var searchVectorsTool = AIFunctionFactory.Create(wealthService.SearchVectors);
-var directAnswerTool = AIFunctionFactory.Create(wealthService.DirectAnswer);
+// Add WealthAgentFactory as singleton
+builder.Services.AddSingleton<WealthAgentFactory>();
 
+// Register chat options before building the service provider
 var chatOptions = new ChatOptions
 {
     Tools = new[]
     {
-        directAnswerTool,
-        storeVectorsTool,
-        searchVectorsTool
+        AIFunctionFactory.Create((WealthServicefromDB ws) => ws.AnswerFromDB),
+        // Add other tools here as needed
     }
 };
 
 builder.Services.AddSingleton(chatOptions);
 
+// Build the service provider once all services are registered
 var app = builder.Build();
-app.Services.GetRequiredService<WealthService>();
+var serviceProvider = app.Services;
+
+// Get service instances
+var wealthService = serviceProvider.GetRequiredService<WealthService>();
+var wealthServiceWoLLM = serviceProvider.GetRequiredService<WealthServiceWoLLM>();
+var wealthServicefromDB = serviceProvider.GetRequiredService<WealthServicefromDB>();
+var wealthAgentFactory = serviceProvider.GetRequiredService<WealthAgentFactory>();
+var wealthAgent = wealthAgentFactory.Create();
+
+// Initialize agent goals
+wealthAgent.AddGoal("Maximize portfolio returns", 1.0);
+wealthAgent.AddGoal("Minimize transaction costs", 0.8);
+wealthAgent.AddGoal("Ensure regulatory compliance", 0.9);
+wealthAgent.AddGoal("Optimize client satisfaction", 0.95);
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -76,11 +84,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseStaticFiles(); // Enable serving static files
-app.UseRouting(); // Must come before UseEndpoints
+app.UseStaticFiles();
+app.UseRouting();
 app.UseAuthorization();
 app.MapControllers();
-// Serve index.html as the default page 
 app.MapFallbackToFile("index.html");
 
 app.Run();

@@ -28,7 +28,7 @@ namespace wealthai
             var messages = new List<ChatMessage>
             {
                 new(ChatRole.System, """
-                Hey there, I'm Richie, your friendly wealth management assistant! 
+                Your name is Richie, you are friendly wealth management assistant! 
                 I can help you with all your wealth related queries.
                 Just let me know what you need and I'll do my best to help!
                 """),

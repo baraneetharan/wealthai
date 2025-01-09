@@ -1,0 +1,5 @@
+How many unique clients are there using AnswerFromDB
+give me the rmname,no of clients order by count in the mytransaction table
+Who is the top 3 clients by transaction amount using AnswerFromDB
+What is the total transaction amount for each transaction type using AnswerFromDB
+Give me the top 3 transaction dates by total transaction amount using AnswerFromDB
